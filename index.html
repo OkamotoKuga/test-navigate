@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>オフラインナビゲーション</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        text-align: center;
+        margin: 0;
+        padding: 20px;
+      }
+      #arrow-container {
+        margin: 20px auto;
+        width: 100px;
+        height: 100px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid #000;
+        border-radius: 50%;
+      }
+      #arrow {
+        font-size: 48px;
+      }
+      #orientation,
+      #distance,
+      #progress {
+        margin: 10px 0;
+      }
+      #startNavigation,
+      #fileInput {
+        margin-top: 20px;
+        padding: 10px 20px;
+        font-size: 16px;
+        background-color: #4caf50;
+        color: white;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+      }
+      #startNavigation:hover,
+      #fileInput:hover {
+        background-color: #45a049;
+      }
+      #fileInput {
+        display: inline-block;
+        background-color: #008cba;
+      }
+      #fileInput:hover {
+        background-color: #007b9a;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>オフラインナビゲーション</h1>
+    <div id="arrow-container">
+      <div id="arrow">↑</div>
+    </div>
+    <div id="orientation"></div>
+    <div id="distance">次のターンポイントまでの距離:</div>
+    <div id="progress">ターンポイント:</div>
+    <input type="file" id="fileInput" accept=".json" />
+    <button id="startNavigation" disabled>ナビゲーション開始</button>
+
+    <script>
+      let steps = []; // グローバル変数としてstepsを定義
+      let currentStepIndex = 0; // グローバル変数としてcurrentStepIndexを定義
+      let watchId;
+
+      const fileInput = document.getElementById("fileInput");
+      const startButton = document.getElementById("startNavigation");
+
+      fileInput.addEventListener("change", loadJSONFile);
+      startButton.addEventListener("click", startNavigation);
+
+      function loadJSONFile(event) {
+        const file = event.target.files[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = function (e) {
+            try {
+              const data = JSON.parse(e.target.result);
+              steps = data.routes[0].legs[0].steps; // JSONからstepsを取得
+              console.log("読み込んだステップ:", steps);
+              if (steps.length === 0) {
+                alert("ルートデータが空です。");
+                return;
+              }
+              alert("ルートデータが読み込まれました！");
+              startButton.disabled = false;
+            } catch (error) {
+              alert("JSONファイルの解析に失敗しました。");
+              console.error("Error parsing JSON:", error);
+            }
+          };
+          reader.readAsText(file);
+        }
+      }
+
+      function startNavigation() {
+        if (steps.length === 0) {
+          alert("ルートデータが読み込まれていません。");
+          return;
+        }
+
+        if ("geolocation" in navigator) {
+          watchId = navigator.geolocation.watchPosition(
+            updatePosition,
+            handleGeolocationError,
+            {
+              enableHighAccuracy: true,
+              maximumAge: 30000,
+              timeout: 27000,
+            }
+          );
+          updateProgress();
+        } else {
+          alert("Geolocation APIがサポートされていません。");
+        }
+      }
+
+      function updatePosition(position) {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        const nextPoint = steps[currentStepIndex].end_location;
+
+        const distanceToNextTurn = computeDistance(
+          lat,
+          lng,
+          nextPoint.lat,
+          nextPoint.lng
+        );
+        document.getElementById(
+          "distance"
+        ).innerHTML = `次のターンポイントまでの距離: ${distanceToNextTurn.toFixed(
+          2
+        )}m`;
+
+        if (distanceToNextTurn < 5) {
+          currentStepIndex++;
+          if (currentStepIndex >= steps.length) {
+            document.getElementById("distance").innerHTML = "Goal!";
+            navigator.geolocation.clearWatch(watchId);
+          } else {
+            updateProgress();
+          }
+        }
+
+        const bearingToNextTurn = computeBearing(
+          lat,
+          lng,
+          nextPoint.lat,
+          nextPoint.lng
+        );
+        updateArrow(bearingToNextTurn);
+      }
+
+      function handleGeolocationError(error) {
+        alert("Geolocation error: " + error.message);
+        console.error("Geolocation error:", error);
+      }
+
+      function computeDistance(lat1, lng1, lat2, lng2) {
+        const R = 6371e3; // 地球の半径
+        const φ1 = (lat1 * Math.PI) / 180;
+        const φ2 = (lat2 * Math.PI) / 180;
+        const Δφ = ((lat2 - lat1) * Math.PI) / 180;
+        const Δλ = ((lng2 - lng1) * Math.PI) / 180;
+
+        const a =
+          Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+          Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+        return R * c;
+      }
+
+      function computeBearing(lat1, lng1, lat2, lng2) {
+        const φ1 = (lat1 * Math.PI) / 180;
+        const φ2 = (lat2 * Math.PI) / 180;
+        const Δλ = ((lng2 - lng1) * Math.PI) / 180;
+
+        const y = Math.sin(Δλ) * Math.cos(φ2);
+        const x =
+          Math.cos(φ1) * Math.sin(φ2) -
+          Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
+        const θ = Math.atan2(y, x);
+
+        return (θ * 180) / Math.PI;
+      }
+
+      function updateArrow(bearing) {
+        const arrow = document.getElementById("arrow");
+        arrow.style.transform = `rotate(${bearing}deg)`;
+      }
+
+      function updateProgress() {
+        const progress = document.getElementById("progress");
+        progress.innerHTML = `ターンポイント: ${currentStepIndex + 1} / ${
+          steps.length
+        }`;
+      }
+
+      if (window.DeviceOrientationEvent) {
+        window.addEventListener("deviceorientation", function (e) {
+          if (e.alpha !== null) {
+            const z = e.alpha;
+            const arrow = document.getElementById("arrow");
+            arrow.style.transform = `rotate(${z}deg)`;
+          }
+        });
+      } else {
+        console.warn("DeviceOrientation event is not supported");
+      }
+    </script>
+  </body>
+</html>
