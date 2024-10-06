@@ -11,6 +11,12 @@
         margin: 0;
         padding: 20px;
       }
+      #map-container {
+        margin: 20px auto;
+        width: 300px;
+        height: 300px;
+        border: 1px solid #000;
+      }
       #arrow-container {
         margin: 20px auto;
         width: 100px;
@@ -55,6 +61,9 @@
   </head>
   <body>
     <h1>オフラインナビゲーション</h1>
+    <div id="map-container">
+      <canvas id="mapCanvas" width="300" height="300"></canvas>
+    </div>
     <div id="arrow-container">
       <div id="arrow">↑</div>
     </div>
@@ -65,12 +74,16 @@
     <button id="startNavigation" disabled>ナビゲーション開始</button>
 
     <script>
-      let steps = []; // グローバル変数としてstepsを定義
-      let currentStepIndex = 0; // グローバル変数としてcurrentStepIndexを定義
+      let steps = [];
+      let currentStepIndex = 0;
       let watchId;
+      let currentPosition = null;
+      let minLat, maxLat, minLng, maxLng;
 
       const fileInput = document.getElementById("fileInput");
       const startButton = document.getElementById("startNavigation");
+      const mapCanvas = document.getElementById("mapCanvas");
+      const ctx = mapCanvas.getContext("2d");
 
       fileInput.addEventListener("change", loadJSONFile);
       startButton.addEventListener("click", startNavigation);
@@ -82,7 +95,7 @@
           reader.onload = function (e) {
             try {
               const data = JSON.parse(e.target.result);
-              steps = data.routes[0].legs[0].steps; // JSONからstepsを取得
+              steps = data.routes[0].legs[0].steps;
               console.log("読み込んだステップ:", steps);
               if (steps.length === 0) {
                 alert("ルートデータが空です。");
@@ -90,12 +103,102 @@
               }
               alert("ルートデータが読み込まれました！");
               startButton.disabled = false;
+              calculateBounds();
+              drawMap();
             } catch (error) {
               alert("JSONファイルの解析に失敗しました。");
               console.error("Error parsing JSON:", error);
             }
           };
           reader.readAsText(file);
+        }
+      }
+
+      function calculateBounds() {
+        minLat = maxLat = steps[0].start_location.lat;
+        minLng = maxLng = steps[0].start_location.lng;
+
+        steps.forEach((step) => {
+          minLat = Math.min(
+            minLat,
+            step.start_location.lat,
+            step.end_location.lat
+          );
+          maxLat = Math.max(
+            maxLat,
+            step.start_location.lat,
+            step.end_location.lat
+          );
+          minLng = Math.min(
+            minLng,
+            step.start_location.lng,
+            step.end_location.lng
+          );
+          maxLng = Math.max(
+            maxLng,
+            step.start_location.lng,
+            step.end_location.lng
+          );
+        });
+
+        // バッファを追加
+        const latBuffer = (maxLat - minLat) * 0.1;
+        const lngBuffer = (maxLng - minLng) * 0.1;
+        minLat -= latBuffer;
+        maxLat += latBuffer;
+        minLng -= lngBuffer;
+        maxLng += lngBuffer;
+      }
+
+      function drawMap() {
+        ctx.clearRect(0, 0, mapCanvas.width, mapCanvas.height);
+
+        // ルートを描画
+        ctx.beginPath();
+        ctx.strokeStyle = "blue";
+        ctx.lineWidth = 2;
+        steps.forEach((step, index) => {
+          const x1 =
+            ((step.start_location.lng - minLng) / (maxLng - minLng)) *
+            mapCanvas.width;
+          const y1 =
+            mapCanvas.height -
+            ((step.start_location.lat - minLat) / (maxLat - minLat)) *
+              mapCanvas.height;
+          const x2 =
+            ((step.end_location.lng - minLng) / (maxLng - minLng)) *
+            mapCanvas.width;
+          const y2 =
+            mapCanvas.height -
+            ((step.end_location.lat - minLat) / (maxLat - minLat)) *
+              mapCanvas.height;
+
+          if (index === 0) {
+            ctx.moveTo(x1, y1);
+          }
+          ctx.lineTo(x2, y2);
+
+          // ターンポイントを描画
+          ctx.fillStyle = "red";
+          ctx.beginPath();
+          ctx.arc(x2, y2, 5, 0, 2 * Math.PI);
+          ctx.fill();
+        });
+        ctx.stroke();
+
+        // 現在地を描画
+        if (currentPosition) {
+          const x =
+            ((currentPosition.coords.longitude - minLng) / (maxLng - minLng)) *
+            mapCanvas.width;
+          const y =
+            mapCanvas.height -
+            ((currentPosition.coords.latitude - minLat) / (maxLat - minLat)) *
+              mapCanvas.height;
+          ctx.fillStyle = "green";
+          ctx.beginPath();
+          ctx.arc(x, y, 7, 0, 2 * Math.PI);
+          ctx.fill();
         }
       }
 
@@ -122,6 +225,7 @@
       }
 
       function updatePosition(position) {
+        currentPosition = position;
         const lat = position.coords.latitude;
         const lng = position.coords.longitude;
         const nextPoint = steps[currentStepIndex].end_location;
@@ -155,6 +259,8 @@
           nextPoint.lng
         );
         updateArrow(bearingToNextTurn);
+
+        drawMap();
       }
 
       function handleGeolocationError(error) {
@@ -163,7 +269,7 @@
       }
 
       function computeDistance(lat1, lng1, lat2, lng2) {
-        const R = 6371e3; // 地球の半径
+        const R = 6371e3;
         const φ1 = (lat1 * Math.PI) / 180;
         const φ2 = (lat2 * Math.PI) / 180;
         const Δφ = ((lat2 - lat1) * Math.PI) / 180;
