@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>オフラインナビゲーション</title>
+    <title>オフラインナビゲーション（更新版）</title>
     <style>
       body {
         font-family: Arial, sans-serif;
@@ -60,7 +60,7 @@
     </style>
   </head>
   <body>
-    <h1>オフラインナビゲーション</h1>
+    <h1>オフラインナビゲーション（更新版）</h1>
     <div id="map-container">
       <canvas id="mapCanvas" width="300" height="300"></canvas>
     </div>
@@ -128,7 +128,6 @@
           maxLng = Math.max(maxLng, step.start_location.lng, step.end_location.lng);
         });
 
-        // バッファを追加
         const latBuffer = (maxLat - minLat) * 0.1;
         const lngBuffer = (maxLng - minLng) * 0.1;
         minLat -= latBuffer;
@@ -140,7 +139,6 @@
       function drawFullMap() {
         ctx.clearRect(0, 0, mapCanvas.width, mapCanvas.height);
 
-        // ルートを描画
         ctx.beginPath();
         ctx.strokeStyle = "blue";
         ctx.lineWidth = 3;
@@ -157,7 +155,6 @@
         });
         ctx.stroke();
 
-        // ターンポイントを描画
         steps.forEach((step, index) => {
           const x = ((step.end_location.lng - minLng) / (maxLng - minLng)) * mapCanvas.width;
           const y = mapCanvas.height - ((step.end_location.lat - minLat) / (maxLat - minLat)) * mapCanvas.height;
@@ -175,25 +172,22 @@
         });
       }
 
-      
       function updateCurrentPosition() {
-  if (currentPosition && currentPosition.coords) {
-    // 前回の位置を消去
-    if (previousPosition && previousPosition.coords) {
-      const prevX = ((previousPosition.coords.longitude - minLng) / (maxLng - minLng)) * mapCanvas.width;
-      const prevY = mapCanvas.height - ((previousPosition.coords.latitude - minLat) / (maxLat - minLat)) * mapCanvas.height;
-      ctx.clearRect(prevX - 10, prevY - 10, 20, 20);
-    }
+        if (currentPosition && currentPosition.coords) {
+          if (previousPosition && previousPosition.coords) {
+            const prevX = ((previousPosition.coords.longitude - minLng) / (maxLng - minLng)) * mapCanvas.width;
+            const prevY = mapCanvas.height - ((previousPosition.coords.latitude - minLat) / (maxLat - minLat)) * mapCanvas.height;
+            ctx.clearRect(prevX - 10, prevY - 10, 20, 20);
+          }
 
-    // 新しい位置を描画
-    const x = ((currentPosition.coords.longitude - minLng) / (maxLng - minLng)) * mapCanvas.width;
-    const y = mapCanvas.height - ((currentPosition.coords.latitude - minLat) / (maxLat - minLat)) * mapCanvas.height;
-    drawArrow(ctx, x, y, currentHeading, 10, "green");
+          const x = ((currentPosition.coords.longitude - minLng) / (maxLng - minLng)) * mapCanvas.width;
+          const y = mapCanvas.height - ((currentPosition.coords.latitude - minLat) / (maxLat - minLat)) * mapCanvas.height;
+          drawArrow(ctx, x, y, currentHeading, 10, "green");
 
-    previousPosition = {...currentPosition};
-  } else {
-    console.error("現在の位置情報が不正です:", currentPosition);
-  }
+          previousPosition = {...currentPosition};
+        } else {
+          console.error("現在の位置情報が不正です:", currentPosition);
+        }
       }
 
       function updateProgress() {
@@ -213,62 +207,57 @@
         console.warn("DeviceOrientation event is not supported");
       }
 
-     function startNavigation() {
-  if (navigator.geolocation) {
-    watchId = navigator.geolocation.watchPosition(
-      updatePosition,
-      handleGeolocationError,
-      { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
-    );
-  } else {
-    alert("Geolocation is not supported by this browser.");
-  }
-}
-
-
-
-
-
-     function updatePosition(position) {
-  console.log("位置情報を受信:", position);
-  if (position && position.coords) {
-    currentPosition = position;
-    if (previousPosition) {
-      const distance = computeDistance(
-        previousPosition.coords.latitude,
-        previousPosition.coords.longitude,
-        currentPosition.coords.latitude,
-        currentPosition.coords.longitude
-      );
-      console.log("移動距離:", distance);
-      if (distance > 10) {
-        currentHeading = computeBearing(
-          previousPosition.coords.latitude,
-          previousPosition.coords.longitude,
-          currentPosition.coords.latitude,
-          currentPosition.coords.longitude
-        );
-        updateCurrentPosition();
-        updateArrow();
-        updateProgress();
+      function startNavigation() {
+        if ("geolocation" in navigator) {
+          watchId = navigator.geolocation.watchPosition(
+            updatePosition,
+            handleGeolocationError,
+            { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+          );
+        } else {
+          alert("このブラウザではGeolocationがサポートされていません。");
+        }
       }
-    } else {
-      previousPosition = {...currentPosition};
-      updateCurrentPosition();
-    }
-  } else {
-    console.error("位置情報が不正です:", position);
-  }
-}
 
+      function updatePosition(position) {
+        console.log("位置情報を受信:", position);
+        if (position && position.coords && position.coords.latitude && position.coords.longitude) {
+          currentPosition = position;
+          if (previousPosition) {
+            const distance = computeDistance(
+              previousPosition.coords.latitude,
+              previousPosition.coords.longitude,
+              currentPosition.coords.latitude,
+              currentPosition.coords.longitude
+            );
+            console.log("移動距離:", distance);
+            if (distance > 10) {
+              currentHeading = computeBearing(
+                previousPosition.coords.latitude,
+                previousPosition.coords.longitude,
+                currentPosition.coords.latitude,
+                currentPosition.coords.longitude
+              );
+              updateCurrentPosition();
+              updateArrow();
+              updateProgress();
+            }
+          } else {
+            previousPosition = {...currentPosition};
+            updateCurrentPosition();
+          }
+        } else {
+          console.error("位置情報が不正です:", position);
+        }
+      }
 
       function handleGeolocationError(error) {
-  console.error("Geolocation error:", error);
-  alert("位置情報の取得に失敗しました。エラーコード: " + error.code + "\nメッセージ: " + error.message);
+        console.error("Geolocation error:", error);
+        alert("位置情報の取得に失敗しました。エラーコード: " + error.code + "\nメッセージ: " + error.message);
       }
 
       function computeDistance(lat1, lon1, lat2, lon2) {
-        const R = 6371e3; // metres
+        const R = 6371e3;
         const φ1 = (lat1 * Math.PI) / 180;
         const φ2 = (lat2 * Math.PI) / 180;
         const Δφ = ((lat2 - lat1) * Math.PI) / 180;
@@ -300,42 +289,42 @@
       }
 
       function updateArrow() {
-  if (currentPosition && currentPosition.coords && steps[currentStepIndex]) {
-    const arrow = document.getElementById("arrow");
-    const nextStep = steps[currentStepIndex];
-    const distance = computeDistance(
-      currentPosition.coords.latitude,
-      currentPosition.coords.longitude,
-      nextStep.end_location.lat,
-      nextStep.end_location.lng
-    );
+        if (currentPosition && currentPosition.coords && steps[currentStepIndex]) {
+          const arrow = document.getElementById("arrow");
+          const nextStep = steps[currentStepIndex];
+          const distance = computeDistance(
+            currentPosition.coords.latitude,
+            currentPosition.coords.longitude,
+            nextStep.end_location.lat,
+            nextStep.end_location.lng
+          );
 
-    const bearing = computeBearing(
-      currentPosition.coords.latitude,
-      currentPosition.coords.longitude,
-      nextStep.end_location.lat,
-      nextStep.end_location.lng
-    );
+          const bearing = computeBearing(
+            currentPosition.coords.latitude,
+            currentPosition.coords.longitude,
+            nextStep.end_location.lat,
+            nextStep.end_location.lng
+          );
 
-    const heading = (bearing - currentHeading + 360) % 360;
-    arrow.style.transform = `rotate(${heading}deg)`;
+          const heading = (bearing - currentHeading + 360) % 360;
+          arrow.style.transform = `rotate(${heading}deg)`;
 
-    const distanceElement = document.getElementById("distance");
-    distanceElement.innerHTML = `次のターンポイントまでの距離: ${distance.toFixed(2)} メートル`;
+          const distanceElement = document.getElementById("distance");
+          distanceElement.innerHTML = `次のターンポイントまでの距離: ${distance.toFixed(2)} メートル`;
 
-    if (distance < 10) {
-      currentStepIndex++;
-      if (currentStepIndex >= steps.length) {
-        alert("ナビゲーションが完了しました！");
-        navigator.geolocation.clearWatch(watchId);
-      } else {
-        updateProgress();
+          if (distance < 10) {
+            currentStepIndex++;
+            if (currentStepIndex >= steps.length) {
+              alert("ナビゲーションが完了しました！");
+              navigator.geolocation.clearWatch(watchId);
+            } else {
+              updateProgress();
+            }
+          }
+        } else {
+          console.error("位置情報またはステップ情報が不正です:", currentPosition, steps[currentStepIndex]);
+        }
       }
-    }
-  } else {
-    console.error("位置情報またはステップ情報が不正です:", currentPosition, steps[currentStepIndex]);
-  }
-}
 
       function drawArrow(ctx, x, y, angle, size, color) {
         ctx.save();
