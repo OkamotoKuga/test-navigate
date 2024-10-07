@@ -184,7 +184,7 @@
       function drawArrow(ctx, x, y, angle, size, color) {
         ctx.save();
         ctx.translate(x, y);
-        ctx.rotate(angle * Math.PI / 180);
+        ctx.rotate((angle * Math.PI) / 180);
         ctx.fillStyle = color;
         ctx.beginPath();
         ctx.moveTo(0, -size);
@@ -197,9 +197,7 @@
 
       function updateProgress() {
         const progress = document.getElementById("progress");
-        progress.innerHTML = `ターンポイント: ${currentStepIndex + 1} / ${
-          steps.length
-        }`;
+        progress.innerHTML = `ターンポイント: ${currentStepIndex + 1} / ${steps.length}`;
       }
 
       if (window.DeviceOrientationEvent) {
@@ -316,9 +314,7 @@
         arrow.style.transform = `rotate(${heading}deg)`;
 
         const distanceElement = document.getElementById("distance");
-        distanceElement.innerHTML = `次のターンポイントまでの距離: ${distance.toFixed(
-          2
-        )} メートル`;
+        distanceElement.innerHTML = `次のターンポイントまでの距離: ${distance.toFixed(2)} メートル`;
 
         if (distance < 10) {
           currentStepIndex++;
