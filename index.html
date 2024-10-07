@@ -78,6 +78,7 @@
       let currentStepIndex = 0;
       let watchId;
       let currentPosition = null;
+      let currentHeading = 0;
       let minLat, maxLat, minLng, maxLng;
 
       const fileInput = document.getElementById("fileInput");
@@ -118,27 +119,11 @@
         minLat = maxLat = steps[0].start_location.lat;
         minLng = maxLng = steps[0].start_location.lng;
 
-        steps.forEach((step) => {
-          minLat = Math.min(
-            minLat,
-            step.start_location.lat,
-            step.end_location.lat
-          );
-          maxLat = Math.max(
-            maxLat,
-            step.start_location.lat,
-            step.end_location.lat
-          );
-          minLng = Math.min(
-            minLng,
-            step.start_location.lng,
-            step.end_location.lng
-          );
-          maxLng = Math.max(
-            maxLng,
-            step.start_location.lng,
-            step.end_location.lng
-          );
+        steps.forEach(step => {
+          minLat = Math.min(minLat, step.start_location.lat, step.end_location.lat);
+          maxLat = Math.max(maxLat, step.start_location.lat, step.end_location.lat);
+          minLng = Math.min(minLng, step.start_location.lng, step.end_location.lng);
+          maxLng = Math.max(maxLng, step.start_location.lng, step.end_location.lng);
         });
 
         // バッファを追加
@@ -158,20 +143,10 @@
         ctx.strokeStyle = "blue";
         ctx.lineWidth = 2;
         steps.forEach((step, index) => {
-          const x1 =
-            ((step.start_location.lng - minLng) / (maxLng - minLng)) *
-            mapCanvas.width;
-          const y1 =
-            mapCanvas.height -
-            ((step.start_location.lat - minLat) / (maxLat - minLat)) *
-              mapCanvas.height;
-          const x2 =
-            ((step.end_location.lng - minLng) / (maxLng - minLng)) *
-            mapCanvas.width;
-          const y2 =
-            mapCanvas.height -
-            ((step.end_location.lat - minLat) / (maxLat - minLat)) *
-              mapCanvas.height;
+          const x1 = ((step.start_location.lng - minLng) / (maxLng - minLng)) * mapCanvas.width;
+          const y1 = mapCanvas.height - ((step.start_location.lat - minLat) / (maxLat - minLat)) * mapCanvas.height;
+          const x2 = ((step.end_location.lng - minLng) / (maxLng - minLng)) * mapCanvas.width;
+          const y2 = mapCanvas.height - ((step.end_location.lat - minLat) / (maxLat - minLat)) * mapCanvas.height;
 
           if (index === 0) {
             ctx.moveTo(x1, y1);
@@ -181,25 +156,38 @@
           // ターンポイントを描画
           ctx.fillStyle = "red";
           ctx.beginPath();
-          ctx.arc(x2, y2, 5, 0, 2 * Math.PI);
+          ctx.arc(x2, y2, 10, 0, 2 * Math.PI);
           ctx.fill();
+
+          // ターンポイントに数字を追加
+          ctx.fillStyle = "white";
+          ctx.font = "12px Arial";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(index + 1, x2, y2);
         });
         ctx.stroke();
 
-        // 現在地を描画
+        // 現在地を矢印で描画
         if (currentPosition) {
-          const x =
-            ((currentPosition.coords.longitude - minLng) / (maxLng - minLng)) *
-            mapCanvas.width;
-          const y =
-            mapCanvas.height -
-            ((currentPosition.coords.latitude - minLat) / (maxLat - minLat)) *
-              mapCanvas.height;
-          ctx.fillStyle = "green";
-          ctx.beginPath();
-          ctx.arc(x, y, 7, 0, 2 * Math.PI);
-          ctx.fill();
+          const x = ((currentPosition.coords.longitude - minLng) / (maxLng - minLng)) * mapCanvas.width;
+          const y = mapCanvas.height - ((currentPosition.coords.latitude - minLat) / (maxLat - minLat)) * mapCanvas.height;
+          drawArrow(ctx, x, y, currentHeading, 15, "green");
         }
+      }
+
+      function drawArrow(ctx, x, y, angle, size, color) {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(angle * Math.PI / 180);
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.moveTo(0, -size);
+        ctx.lineTo(size / 2, size / 2);
+        ctx.lineTo(-size / 2, size / 2);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
       }
 
       function startNavigation() {
@@ -260,7 +248,23 @@
         );
         updateArrow(bearingToNextTurn);
 
+        // 現在の進行方向を更新
+        if (position.coords.heading !== null) {
+          currentHeading = position.coords.heading;
+        } else {
+          // ヘディング情報がない場合は、前回の位置との角度を計算
+          if (previousPosition) {
+            currentHeading = computeBearing(
+              previousPosition.coords.latitude,
+              previousPosition.coords.longitude,
+              lat,
+              lng
+            );
+          }
+        }
+
         drawMap();
+        previousPosition = position;
       }
 
       function handleGeolocationError(error) {
@@ -320,6 +324,8 @@
       } else {
         console.warn("DeviceOrientation event is not supported");
       }
+
+      let previousPosition = null;
     </script>
   </body>
 </html>
