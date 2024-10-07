@@ -141,7 +141,7 @@
         // ルートを描画
         ctx.beginPath();
         ctx.strokeStyle = "blue";
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 3;
         steps.forEach((step, index) => {
           const x1 = ((step.start_location.lng - minLng) / (maxLng - minLng)) * mapCanvas.width;
           const y1 = mapCanvas.height - ((step.start_location.lat - minLat) / (maxLat - minLat)) * mapCanvas.height;
@@ -152,11 +152,17 @@
             ctx.moveTo(x1, y1);
           }
           ctx.lineTo(x2, y2);
+        });
+        ctx.stroke();
 
-          // ターンポイントを描画
+        // ターンポイントを描画
+        steps.forEach((step, index) => {
+          const x = ((step.end_location.lng - minLng) / (maxLng - minLng)) * mapCanvas.width;
+          const y = mapCanvas.height - ((step.end_location.lat - minLat) / (maxLat - minLat)) * mapCanvas.height;
+
           ctx.fillStyle = "red";
           ctx.beginPath();
-          ctx.arc(x2, y2, 10, 0, 2 * Math.PI);
+          ctx.arc(x, y, 10, 0, 2 * Math.PI);
           ctx.fill();
 
           // ターンポイントに数字を追加
@@ -164,9 +170,8 @@
           ctx.font = "12px Arial";
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
-          ctx.fillText(index + 1, x2, y2);
+          ctx.fillText(index + 1, x, y);
         });
-        ctx.stroke();
 
         // 現在地を矢印で描画
         if (currentPosition) {
@@ -190,122 +195,6 @@
         ctx.restore();
       }
 
-      function startNavigation() {
-        if (steps.length === 0) {
-          alert("ルートデータが読み込まれていません。");
-          return;
-        }
-
-        if ("geolocation" in navigator) {
-          watchId = navigator.geolocation.watchPosition(
-            updatePosition,
-            handleGeolocationError,
-            {
-              enableHighAccuracy: true,
-              maximumAge: 30000,
-              timeout: 27000,
-            }
-          );
-          updateProgress();
-        } else {
-          alert("Geolocation APIがサポートされていません。");
-        }
-      }
-
-      function updatePosition(position) {
-        currentPosition = position;
-        const lat = position.coords.latitude;
-        const lng = position.coords.longitude;
-        const nextPoint = steps[currentStepIndex].end_location;
-
-        const distanceToNextTurn = computeDistance(
-          lat,
-          lng,
-          nextPoint.lat,
-          nextPoint.lng
-        );
-        document.getElementById(
-          "distance"
-        ).innerHTML = `次のターンポイントまでの距離: ${distanceToNextTurn.toFixed(
-          2
-        )}m`;
-
-        if (distanceToNextTurn < 5) {
-          currentStepIndex++;
-          if (currentStepIndex >= steps.length) {
-            document.getElementById("distance").innerHTML = "Goal!";
-            navigator.geolocation.clearWatch(watchId);
-          } else {
-            updateProgress();
-          }
-        }
-
-        const bearingToNextTurn = computeBearing(
-          lat,
-          lng,
-          nextPoint.lat,
-          nextPoint.lng
-        );
-        updateArrow(bearingToNextTurn);
-
-        // 現在の進行方向を更新
-        if (position.coords.heading !== null) {
-          currentHeading = position.coords.heading;
-        } else {
-          // ヘディング情報がない場合は、前回の位置との角度を計算
-          if (previousPosition) {
-            currentHeading = computeBearing(
-              previousPosition.coords.latitude,
-              previousPosition.coords.longitude,
-              lat,
-              lng
-            );
-          }
-        }
-
-        drawMap();
-        previousPosition = position;
-      }
-
-      function handleGeolocationError(error) {
-        alert("Geolocation error: " + error.message);
-        console.error("Geolocation error:", error);
-      }
-
-      function computeDistance(lat1, lng1, lat2, lng2) {
-        const R = 6371e3;
-        const φ1 = (lat1 * Math.PI) / 180;
-        const φ2 = (lat2 * Math.PI) / 180;
-        const Δφ = ((lat2 - lat1) * Math.PI) / 180;
-        const Δλ = ((lng2 - lng1) * Math.PI) / 180;
-
-        const a =
-          Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-          Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-        return R * c;
-      }
-
-      function computeBearing(lat1, lng1, lat2, lng2) {
-        const φ1 = (lat1 * Math.PI) / 180;
-        const φ2 = (lat2 * Math.PI) / 180;
-        const Δλ = ((lng2 - lng1) * Math.PI) / 180;
-
-        const y = Math.sin(Δλ) * Math.cos(φ2);
-        const x =
-          Math.cos(φ1) * Math.sin(φ2) -
-          Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
-        const θ = Math.atan2(y, x);
-
-        return (θ * 180) / Math.PI;
-      }
-
-      function updateArrow(bearing) {
-        const arrow = document.getElementById("arrow");
-        arrow.style.transform = `rotate(${bearing}deg)`;
-      }
-
       function updateProgress() {
         const progress = document.getElementById("progress");
         progress.innerHTML = `ターンポイント: ${currentStepIndex + 1} / ${
@@ -326,6 +215,119 @@
       }
 
       let previousPosition = null;
+
+      function startNavigation() {
+        if (navigator.geolocation) {
+          watchId = navigator.geolocation.watchPosition(
+            updatePosition,
+            handleGeolocationError,
+            { enableHighAccuracy: true }
+          );
+        } else {
+          alert("Geolocation is not supported by this browser.");
+        }
+      }
+
+      function updatePosition(position) {
+        currentPosition = position;
+        if (previousPosition) {
+          const distance = computeDistance(
+            previousPosition.coords.latitude,
+            previousPosition.coords.longitude,
+            currentPosition.coords.latitude,
+            currentPosition.coords.longitude
+          );
+          if (distance > 10) {
+            currentHeading = computeBearing(
+              previousPosition.coords.latitude,
+              previousPosition.coords.longitude,
+              currentPosition.coords.latitude,
+              currentPosition.coords.longitude
+            );
+            previousPosition = currentPosition;
+            drawMap();
+            updateArrow();
+            updateProgress();
+          }
+        } else {
+          previousPosition = currentPosition;
+        }
+      }
+
+      function handleGeolocationError(error) {
+        console.error("Error occurred. Error code: " + error.code);
+        // error.code can be:
+        //   0: unknown error
+        //   1: permission denied
+        //   2: position unavailable (error response from location provider)
+        //   3: timed out
+      }
+
+      function computeDistance(lat1, lon1, lat2, lon2) {
+        const R = 6371e3; // metres
+        const φ1 = (lat1 * Math.PI) / 180;
+        const φ2 = (lat2 * Math.PI) / 180;
+        const Δφ = ((lat2 - lat1) * Math.PI) / 180;
+        const Δλ = ((lon2 - lon1) * Math.PI) / 180;
+
+        const a =
+          Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+          Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+        const d = R * c;
+        return d;
+      }
+
+      function computeBearing(lat1, lon1, lat2, lon2) {
+        const φ1 = (lat1 * Math.PI) / 180;
+        const φ2 = (lat2 * Math.PI) / 180;
+        const λ1 = (lon1 * Math.PI) / 180;
+        const λ2 = (lon2 * Math.PI) / 180;
+
+        const y = Math.sin(λ2 - λ1) * Math.cos(φ2);
+        const x =
+          Math.cos(φ1) * Math.sin(φ2) -
+          Math.sin(φ1) * Math.cos(φ2) * Math.cos(λ2 - λ1);
+        const θ = Math.atan2(y, x);
+
+        const bearing = (θ * 180) / Math.PI;
+        return (bearing + 360) % 360;
+      }
+
+      function updateArrow() {
+        const arrow = document.getElementById("arrow");
+        const nextStep = steps[currentStepIndex];
+        const distance = computeDistance(
+          currentPosition.coords.latitude,
+          currentPosition.coords.longitude,
+          nextStep.end_location.lat,
+          nextStep.end_location.lng
+        );
+
+        const bearing = computeBearing(
+          currentPosition.coords.latitude,
+          currentPosition.coords.longitude,
+          nextStep.end_location.lat,
+          nextStep.end_location.lng
+        );
+
+        const heading = (bearing - currentHeading + 360) % 360;
+        arrow.style.transform = `rotate(${heading}deg)`;
+
+        const distanceElement = document.getElementById("distance");
+        distanceElement.innerHTML = `次のターンポイントまでの距離: ${distance.toFixed(
+          2
+        )} メートル`;
+
+        if (distance < 10) {
+          currentStepIndex++;
+          if (currentStepIndex >= steps.length) {
+            alert("ナビゲーションが完了しました！");
+            navigator.geolocation.clearWatch(watchId);
+          }
+        }
+      }
     </script>
   </body>
 </html>
