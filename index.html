@@ -205,17 +205,9 @@
 
       function updateCurrentPosition() {
         if (currentPosition && currentPosition.coords) {
+          // 前の位置を消去
           if (previousPosition && previousPosition.coords) {
-            const prevX =
-              ((previousPosition.coords.longitude - minLng) /
-                (maxLng - minLng)) *
-              mapCanvas.width;
-            const prevY =
-              mapCanvas.height -
-              ((previousPosition.coords.latitude - minLat) /
-                (maxLat - minLat)) *
-                mapCanvas.height;
-            ctx.clearRect(prevX - 10, prevY - 10, 20, 20);
+            drawFullMap(); // 地図を再描画して前の矢印を消去
           }
 
           const x =
@@ -235,9 +227,7 @@
 
       function updateProgress() {
         const progress = document.getElementById("progress");
-        progress.innerHTML = `ターンポイント: ${currentStepIndex + 1} / ${
-          steps.length
-        }`;
+        progress.innerHTML = `ターンポイント: ${currentStepIndex + 1} / ${steps.length}`;
       }
 
       if (window.DeviceOrientationEvent) {
@@ -280,7 +270,7 @@
             currentPosition.coords.longitude,
             steps[currentStepIndex].end_location.lat,
             steps[currentStepIndex].end_location.lng
-          );
+          ).toFixed(1); // 小数点以下1桁に抑える
 
           console.log(
             `次のターンポイントまでの距離: ${distanceToNextStep} メートル`
@@ -377,6 +367,9 @@
         ctx.fill();
         ctx.restore();
       }
+    </script>
+  </body>
+</html>
     </script>
   </body>
 </html>
