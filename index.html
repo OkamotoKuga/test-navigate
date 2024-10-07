@@ -36,7 +36,8 @@
         margin: 10px 0;
       }
       #startNavigation,
-      #fileInput {
+      #fileInput,
+      #debugNextStep {
         margin-top: 20px;
         padding: 10px 20px;
         font-size: 16px;
@@ -47,7 +48,8 @@
         cursor: pointer;
       }
       #startNavigation:hover,
-      #fileInput:hover {
+      #fileInput:hover,
+      #debugNextStep:hover {
         background-color: #45a049;
       }
       #fileInput {
@@ -56,6 +58,12 @@
       }
       #fileInput:hover {
         background-color: #007b9a;
+      }
+      #debugNextStep {
+        background-color: #f44336;
+      }
+      #debugNextStep:hover {
+        background-color: #d32f2f;
       }
     </style>
   </head>
@@ -72,6 +80,7 @@
     <div id="progress">ターンポイント: - / -</div>
     <input type="file" id="fileInput" accept=".json" />
     <button id="startNavigation" disabled>ナビゲーション開始</button>
+    <button id="debugNextStep">次のターンポイントに進む</button>
 
     <script>
       let steps = [];
@@ -84,11 +93,13 @@
 
       const fileInput = document.getElementById("fileInput");
       const startButton = document.getElementById("startNavigation");
+      const debugNextStepButton = document.getElementById("debugNextStep");
       const mapCanvas = document.getElementById("mapCanvas");
       const ctx = mapCanvas.getContext("2d");
 
       fileInput.addEventListener("change", loadJSONFile);
       startButton.addEventListener("click", startNavigation);
+      debugNextStepButton.addEventListener("click", debugNextStep);
 
       function loadJSONFile(event) {
         const file = event.target.files[0];
@@ -205,9 +216,16 @@
 
       function updateCurrentPosition() {
         if (currentPosition && currentPosition.coords) {
-          // 前の位置を消去
           if (previousPosition && previousPosition.coords) {
-            drawFullMap(); // 地図を再描画して前の矢印を消去
+            const prevX =
+              ((previousPosition.coords.longitude - minLng) /
+                (maxLng - minLng)) *
+              mapCanvas.width;
+            const prevY =
+              mapCanvas.height -
+              ((previousPosition.coords.latitude - minLat) / (maxLat - minLat)) *
+                mapCanvas.height;
+            ctx.clearRect(prevX - 10, prevY - 10, 20, 20);
           }
 
           const x =
@@ -264,13 +282,12 @@
         ) {
           currentPosition = position;
 
-          // 次のターンポイントまでの距離を計算
           const distanceToNextStep = computeDistance(
             currentPosition.coords.latitude,
             currentPosition.coords.longitude,
             steps[currentStepIndex].end_location.lat,
             steps[currentStepIndex].end_location.lng
-          ).toFixed(1); // 小数点以下1桁に抑える
+          ).toFixed(1);
 
           console.log(
             `次のターンポイントまでの距離: ${distanceToNextStep} メートル`
@@ -279,20 +296,17 @@
             "distance"
           ).innerText = `次のターンポイントまでの距離: ${distanceToNextStep} メートル`;
 
-          // ターンポイントまでの距離が5メートル未満の場合
           if (distanceToNextStep < 5) {
             currentStepIndex++;
             if (currentStepIndex >= steps.length) {
-              // すべてのステップが完了した場合
               document.getElementById("distance").innerText =
                 "ゴールに到着しました！";
               alert("ナビゲーションが完了しました！");
-              navigator.geolocation.clearWatch(watchId); // 位置情報の監視を停止
+              navigator.geolocation.clearWatch(watchId);
             } else {
-              updateProgress(); // 次のステップに進む
+              updateProgress();
             }
           } else {
-            // 現在の向きとターンポイントの方角を更新
             const bearingToNextStep = computeBearing(
               currentPosition.coords.latitude,
               currentPosition.coords.longitude,
@@ -306,7 +320,7 @@
             arrowElement.style.transform = `rotate(${relativeHeading}deg)`;
           }
 
-          updateCurrentPosition(); // 地図上の現在位置を更新
+          updateCurrentPosition();
         } else {
           console.error("位置情報が不正です:", position);
         }
@@ -323,7 +337,7 @@
       }
 
       function computeDistance(lat1, lon1, lat2, lon2) {
-        const R = 6371e3; // 地球の半径（メートル）
+        const R = 6371e3;
         const φ1 = (lat1 * Math.PI) / 180;
         const φ2 = (lat2 * Math.PI) / 180;
         const Δφ = ((lat2 - lat1) * Math.PI) / 180;
@@ -367,9 +381,18 @@
         ctx.fill();
         ctx.restore();
       }
-    </script>
-  </body>
-</html>
+
+      function debugNextStep() {
+        currentStepIndex++;
+        if (currentStepIndex >= steps.length) {
+          document.getElementById("distance").innerText = "ゴールに到着しました！";
+          alert("ナビゲーションが完了しました！");
+          navigator.geolocation.clearWatch(watchId);
+        } else {
+          updateProgress();
+          updateCurrentPosition();
+        }
+      }
     </script>
   </body>
 </html>
