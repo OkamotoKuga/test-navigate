@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>オフラインナビゲーション</title>
+    <title>オフラインナビゲーション（更新版）</title>
     <style>
       body {
         font-family: Arial, sans-serif;
@@ -60,7 +60,7 @@
     </style>
   </head>
   <body>
-    <h1>オフラインナビゲーション</h1>
+    <h1>オフラインナビゲーション（更新版）</h1>
     <div id="map-container">
       <canvas id="mapCanvas" width="300" height="300"></canvas>
     </div>
@@ -68,8 +68,8 @@
       <div id="arrow">↑</div>
     </div>
     <div id="orientation"></div>
-    <div id="distance">次のターンポイントまでの距離:</div>
-    <div id="progress">ターンポイント:</div>
+    <div id="distance">次のターンポイントまでの距離: - メートル</div>
+    <div id="progress">ターンポイント: - / -</div>
     <input type="file" id="fileInput" accept=".json" />
     <button id="startNavigation" disabled>ナビゲーション開始</button>
 
@@ -78,6 +78,7 @@
       let currentStepIndex = 0;
       let watchId;
       let currentPosition = null;
+      let previousPosition = null;
       let currentHeading = 0;
       let minLat, maxLat, minLng, maxLng;
 
@@ -105,7 +106,8 @@
               alert("ルートデータが読み込まれました！");
               startButton.disabled = false;
               calculateBounds();
-              drawMap();
+              drawFullMap();
+              updateProgress();
             } catch (error) {
               alert("JSONファイルの解析に失敗しました。");
               console.error("Error parsing JSON:", error);
@@ -142,7 +144,6 @@
           );
         });
 
-        // バッファを追加
         const latBuffer = (maxLat - minLat) * 0.1;
         const lngBuffer = (maxLng - minLng) * 0.1;
         minLat -= latBuffer;
@@ -151,10 +152,9 @@
         maxLng += lngBuffer;
       }
 
-      function drawMap() {
+      function drawFullMap() {
         ctx.clearRect(0, 0, mapCanvas.width, mapCanvas.height);
 
-        // ルートを描画
         ctx.beginPath();
         ctx.strokeStyle = "blue";
         ctx.lineWidth = 3;
@@ -181,7 +181,6 @@
         });
         ctx.stroke();
 
-        // ターンポイントを描画
         steps.forEach((step, index) => {
           const x =
             ((step.end_location.lng - minLng) / (maxLng - minLng)) *
@@ -193,19 +192,32 @@
 
           ctx.fillStyle = "red";
           ctx.beginPath();
-          ctx.arc(x, y, 10, 0, 2 * Math.PI);
+          ctx.arc(x, y, 5, 0, 2 * Math.PI);
           ctx.fill();
 
-          // ターンポイントに数字を追加
-          ctx.fillStyle = "white";
-          ctx.font = "12px Arial";
+          ctx.fillStyle = "black";
+          ctx.font = "10px Arial";
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
           ctx.fillText(index + 1, x, y);
         });
+      }
 
-        // 現在地を矢印で描画
-        if (currentPosition) {
+      function updateCurrentPosition() {
+        if (currentPosition && currentPosition.coords) {
+          if (previousPosition && previousPosition.coords) {
+            const prevX =
+              ((previousPosition.coords.longitude - minLng) /
+                (maxLng - minLng)) *
+              mapCanvas.width;
+            const prevY =
+              mapCanvas.height -
+              ((previousPosition.coords.latitude - minLat) /
+                (maxLat - minLat)) *
+                mapCanvas.height;
+            ctx.clearRect(prevX - 10, prevY - 10, 20, 20);
+          }
+
           const x =
             ((currentPosition.coords.longitude - minLng) / (maxLng - minLng)) *
             mapCanvas.width;
@@ -213,22 +225,12 @@
             mapCanvas.height -
             ((currentPosition.coords.latitude - minLat) / (maxLat - minLat)) *
               mapCanvas.height;
-          drawArrow(ctx, x, y, currentHeading, 15, "green");
-        }
-      }
+          drawArrow(ctx, x, y, currentHeading, 10, "green");
 
-      function drawArrow(ctx, x, y, angle, size, color) {
-        ctx.save();
-        ctx.translate(x, y);
-        ctx.rotate((angle * Math.PI) / 180);
-        ctx.fillStyle = color;
-        ctx.beginPath();
-        ctx.moveTo(0, -size);
-        ctx.lineTo(size / 2, size / 2);
-        ctx.lineTo(-size / 2, size / 2);
-        ctx.closePath();
-        ctx.fill();
-        ctx.restore();
+          previousPosition = { ...currentPosition };
+        } else {
+          console.error("現在の位置情報が不正です:", currentPosition);
+        }
       }
 
       function updateProgress() {
@@ -250,62 +252,88 @@
         console.warn("DeviceOrientation event is not supported");
       }
 
-      let previousPosition = null;
-
       function startNavigation() {
-        if (navigator.geolocation) {
+        if ("geolocation" in navigator) {
           watchId = navigator.geolocation.watchPosition(
             updatePosition,
             handleGeolocationError,
-            { enableHighAccuracy: true }
+            { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
           );
         } else {
-          alert("Geolocation is not supported by this browser.");
+          alert("このブラウザではGeolocationがサポートされていません。");
         }
       }
 
       function updatePosition(position) {
-        if (!position || !position.coords) {
-          console.error("Invalid position object:", position);
-          return;
-        }
+        console.log("位置情報を受信:", position);
+        if (
+          position &&
+          position.coords &&
+          position.coords.latitude &&
+          position.coords.longitude
+        ) {
+          currentPosition = position;
 
-        currentPosition = position;
-        if (previousPosition) {
-          const distance = computeDistance(
-            previousPosition.coords.latitude,
-            previousPosition.coords.longitude,
+          // 次のターンポイントまでの距離を計算
+          const distanceToNextStep = computeDistance(
             currentPosition.coords.latitude,
-            currentPosition.coords.longitude
+            currentPosition.coords.longitude,
+            steps[currentStepIndex].end_location.lat,
+            steps[currentStepIndex].end_location.lng
           );
-          if (distance > 10) {
-            currentHeading = computeBearing(
-              previousPosition.coords.latitude,
-              previousPosition.coords.longitude,
+
+          console.log(
+            `次のターンポイントまでの距離: ${distanceToNextStep} メートル`
+          );
+          document.getElementById(
+            "distance"
+          ).innerText = `次のターンポイントまでの距離: ${distanceToNextStep} メートル`;
+
+          // ターンポイントまでの距離が5メートル未満の場合
+          if (distanceToNextStep < 5) {
+            currentStepIndex++;
+            if (currentStepIndex >= steps.length) {
+              // すべてのステップが完了した場合
+              document.getElementById("distance").innerText =
+                "ゴールに到着しました！";
+              alert("ナビゲーションが完了しました！");
+              navigator.geolocation.clearWatch(watchId); // 位置情報の監視を停止
+            } else {
+              updateProgress(); // 次のステップに進む
+            }
+          } else {
+            // 現在の向きとターンポイントの方角を更新
+            const bearingToNextStep = computeBearing(
               currentPosition.coords.latitude,
-              currentPosition.coords.longitude
+              currentPosition.coords.longitude,
+              steps[currentStepIndex].end_location.lat,
+              steps[currentStepIndex].end_location.lng
             );
-            previousPosition = currentPosition;
-            drawMap();
-            updateArrow();
-            updateProgress();
+
+            const relativeHeading =
+              (bearingToNextStep - currentHeading + 360) % 360;
+            const arrowElement = document.getElementById("arrow");
+            arrowElement.style.transform = `rotate(${relativeHeading}deg)`;
           }
+
+          updateCurrentPosition(); // 地図上の現在位置を更新
         } else {
-          previousPosition = currentPosition;
+          console.error("位置情報が不正です:", position);
         }
       }
 
       function handleGeolocationError(error) {
-        console.error("Error occurred. Error code: " + error.code);
-        // error.code can be:
-        //   0: unknown error
-        //   1: permission denied
-        //   2: position unavailable (error response from location provider)
-        //   3: timed out
+        console.error("Geolocation error:", error);
+        alert(
+          "位置情報の取得に失敗しました。エラーコード: " +
+            error.code +
+            "\nメッセージ: " +
+            error.message
+        );
       }
 
       function computeDistance(lat1, lon1, lat2, lon2) {
-        const R = 6371e3; // metres
+        const R = 6371e3; // 地球の半径（メートル）
         const φ1 = (lat1 * Math.PI) / 180;
         const φ2 = (lat2 * Math.PI) / 180;
         const Δφ = ((lat2 - lat1) * Math.PI) / 180;
@@ -316,8 +344,8 @@
           Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
         const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 
-        const d = R * c;
-        return d;
+        const distance = R * c;
+        return distance;
       }
 
       function computeBearing(lat1, lon1, lat2, lon2) {
@@ -336,38 +364,18 @@
         return (bearing + 360) % 360;
       }
 
-      function updateArrow() {
-        const arrow = document.getElementById("arrow");
-        const nextStep = steps[currentStepIndex];
-        const distance = computeDistance(
-          currentPosition.coords.latitude,
-          currentPosition.coords.longitude,
-          nextStep.end_location.lat,
-          nextStep.end_location.lng
-        );
-
-        const bearing = computeBearing(
-          currentPosition.coords.latitude,
-          currentPosition.coords.longitude,
-          nextStep.end_location.lat,
-          nextStep.end_location.lng
-        );
-
-        const heading = (bearing - currentHeading + 360) % 360;
-        arrow.style.transform = `rotate(${heading}deg)`;
-
-        const distanceElement = document.getElementById("distance");
-        distanceElement.innerHTML = `次のターンポイントまでの距離: ${distance.toFixed(
-          2
-        )} メートル`;
-
-        if (distance < 10) {
-          currentStepIndex++;
-          if (currentStepIndex >= steps.length) {
-            alert("ナビゲーションが完了しました！");
-            navigator.geolocation.clearWatch(watchId);
-          }
-        }
+      function drawArrow(ctx, x, y, angle, size, color) {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate((angle * Math.PI) / 180);
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.moveTo(0, -size);
+        ctx.lineTo(size / 2, size / 2);
+        ctx.lineTo(-size / 2, size / 2);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
       }
     </script>
   </body>
